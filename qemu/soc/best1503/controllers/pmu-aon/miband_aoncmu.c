@@ -5,10 +5,15 @@
 #define AON_CMU_BASE 0x40080000u
 #define AON_CMU_CHIP_ID 0x000u
 #define AON_CMU_CHIP_ID_VALUE 0x0153u
+#define AON_CMU_BOOT_MODE 0x038u
 #define AON_CMU_GBL_RESET_PULSE 0x0c4u
 #define AON_CMU_GBL_RESET_SET   0x0c8u
 #define AON_CMU_GBL_RESET_CLR   0x0ccu
 #define AON_CMU_GLOBAL_RESETN   (1u << 7)
+/* Warm-reset cause recorded in the global boot-mode latch; the reference
+ * board sets bit 1 so the ROM handoff and the AP's own early code can tell
+ * a pmu_reboot() soft reset from a cold power-key boot. */
+#define AON_CMU_BOOT_MODE_WARM_RESET (1u << 1)
 
 static uint32_t aoncmu_merge_write(uint32_t old, hwaddr address,
                                    unsigned size, uint64_t value)
@@ -31,6 +36,8 @@ void miband_aoncmu_reset(MiBandAonCmu *aoncmu)
 {
     aoncmu->global_reset_set = 0;
     aoncmu->chip_id_reads = 0;
+    /* boot_mode deliberately survives the reset: it is the retained cause
+     * latch that the next boot reads to distinguish warm from cold starts. */
 }
 
 void miband_aoncmu_set_reset_request(MiBandAonCmu *aoncmu,
@@ -48,6 +55,10 @@ bool miband_aoncmu_read(MiBandAonCmu *aoncmu, hwaddr address, unsigned size,
     if (address == AON_CMU_BASE + AON_CMU_GBL_RESET_SET && size <= 4) {
         *result = (aoncmu->global_reset_set >> ((address & 3) * 8)) &
                   (size == 1 ? 0xffu : size == 2 ? 0xffffu : UINT32_MAX);
+        return true;
+    }
+    if (address == AON_CMU_BASE + AON_CMU_BOOT_MODE && size <= 4) {
+        *result = aoncmu_merge_write(aoncmu->boot_mode, address, size, 0);
         return true;
     }
     if (address != AON_CMU_BASE + AON_CMU_CHIP_ID || size != 4) {
@@ -80,6 +91,9 @@ bool miband_aoncmu_write(MiBandAonCmu *aoncmu, hwaddr address, unsigned size,
         command = aoncmu_merge_write(0, address, size, value);
         aoncmu->global_reset_set |= command;
         if ((command & AON_CMU_GLOBAL_RESETN) && aoncmu->reset_request) {
+            /* Record the warm-reset cause before the machine resets; the
+             * latch is retained by miband_aoncmu_reset(). */
+            aoncmu->boot_mode |= AON_CMU_BOOT_MODE_WARM_RESET;
             aoncmu->reset_request(aoncmu->reset_opaque, command);
         }
         return true;
@@ -90,8 +104,13 @@ bool miband_aoncmu_write(MiBandAonCmu *aoncmu, hwaddr address, unsigned size,
     case AON_CMU_GBL_RESET_PULSE + AON_CMU_BASE:
         command = aoncmu_merge_write(0, address, size, value);
         if ((command & AON_CMU_GLOBAL_RESETN) && aoncmu->reset_request) {
+            aoncmu->boot_mode |= AON_CMU_BOOT_MODE_WARM_RESET;
             aoncmu->reset_request(aoncmu->reset_opaque, command);
         }
+        return true;
+    case AON_CMU_BOOT_MODE + AON_CMU_BASE:
+        aoncmu->boot_mode = aoncmu_merge_write(aoncmu->boot_mode, address,
+                                               size, value);
         return true;
     default:
         /* CHIP_ID is read-only; other AON registers stay in the generic

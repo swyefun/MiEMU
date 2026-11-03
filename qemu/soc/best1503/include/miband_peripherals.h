@@ -72,6 +72,10 @@ typedef struct MiBandAonCmu {
     /* BEST1503 GBL_RESET_SET is a write-one-to-assert latch.  Keep the
      * modeled latch in the SoC block; the machine owns the resulting reset. */
     uint32_t global_reset_set;
+    /* AON_CMU +0x38 keeps the global boot cause across the soft reset so the
+     * ROM handoff (and the AP's own early code) can tell a warm pmu_reboot()
+     * from a cold power-key boot.  Never cleared by miband_aoncmu_reset(). */
+    uint32_t boot_mode;
     void (*reset_request)(void *opaque, uint32_t mask);
     void *reset_opaque;
 } MiBandAonCmu;

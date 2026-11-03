@@ -481,6 +481,14 @@ static void miband_init(MachineState *machine)
     memory_region_init_ram(&s->ram, NULL, "miband.ap-ram",
                            AP_RAM_SIZE, &error_fatal);
     memory_region_add_subregion(sysmem, AP_RAM_BASE, &s->ram);
+    /* The stock PMU startup callback records an asserted wake/power source
+     * in this BSS byte before it decides whether to fall into
+     * pmu_shutdown().  Model a cold power-key assertion for the initial
+     * boot so the firmware does not power the guest off at 0x20078f7c. */
+    {
+        uint8_t *ap_ram = memory_region_get_ram_ptr(&s->ram);
+        ap_ram[0x78f7c] = 1;
+    }
     memory_region_init_alias(&s->ramx, NULL, "miband.ap-ramx",
                              &s->ram, 0, AP_RAM_SIZE);
     memory_region_add_subregion(sysmem, AP_RAMX_BASE, &s->ramx);
