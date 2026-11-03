@@ -1,0 +1,83 @@
+name: build-bes-qemu
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # QEMU checkout lives outside the repo tree so build.sh's checks stay clean.
+  MIBAND_QEMU_SRC: ${{ github.workspace }}/../bes-qemu-8.2
+
+jobs:
+  build:
+    name: Build & validate (ubuntu-24.04)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 150
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install system packages
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential git pkg-config python3 \
+            meson ninja-build libglib2.0-dev libpixman-1-dev
+
+      # build.sh pins clang-23; the distro repo is too old, use apt.llvm.org.
+      - name: Install clang-23
+        run: |
+          wget -q https://apt.llvm.org/llvm.sh
+          chmod +x llvm.sh
+          sudo ./llvm.sh 23
+          /usr/bin/clang-23 --version
+          rm -f llvm.sh
+
+      - name: Cache QEMU checkout
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.MIBAND_QEMU_SRC }}
+          key: qemu-checkout-f671ce11d2a15a58ab752d7cf0b2890c9022c7ba
+          restore-keys: |
+            qemu-checkout-f671ce11d2a15a58ab752d7cf0b2890c9022c7ba
+
+      - name: Build (integrate + configure + ninja)
+        run: bash build.sh
+
+      - name: Show supported machines
+        run: $MIBAND_QEMU_SRC/build/qemu-system-arm -M help
+
+      # ABI/offline regression; uses synthetic guest, no proprietary firmware.
+      - name: Run regression (check_project)
+        timeout-minutes: 60
+        run: python3 tools/check_project.py --qemu $MIBAND_QEMU_SRC/build/qemu-system-arm
+
+      - name: Synthetic boot smoke test
+        run: |
+          python3 tools/synthetic_config.py "$RUNNER_TEMP/bes-syn"
+          set +e
+          timeout 15 $MIBAND_QEMU_SRC/build/qemu-system-arm \
+            -M bes1503,hardware-config="$RUNNER_TEMP/bes-syn/hardware.json" \
+            -kernel "$RUNNER_TEMP/bes-syn/guest.bin" \
+            -display none -serial none -monitor none -no-reboot
+          code=$?
+          set -e
+          # 124 = timeout killed it, i.e. the guest kept running for 15s. Good.
+          if [ "$code" -ne 124 ]; then
+            echo "::error::qemu-system-arm exited early with code $code (expected it to keep running)"
+            exit 1
+          fi
+          echo "Guest survived the 15s smoke test."
+
+      - name: Upload qemu-system-arm
+        uses: actions/upload-artifact@v4
+        with:
+          name: qemu-system-arm-linux
+          path: ${{ env.MIBAND_QEMU_SRC }}/build/qemu-system-arm
+          if-no-files-found: error
