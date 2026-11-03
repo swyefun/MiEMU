@@ -106,6 +106,7 @@ jobs:
           install: >-
             git
             python
+            diffutils
             mingw-w64-ucrt-x86_64-python-pip
             mingw-w64-ucrt-x86_64-python-setuptools
             pkgconf
