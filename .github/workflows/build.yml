@@ -140,7 +140,7 @@ jobs:
 
       - name: Show supported machines
         shell: msys2 {0}
-        run: "$MIBAND_QEMU_SRC/build/qemu-system-arm.exe" -M help
+        run: '"$MIBAND_QEMU_SRC/build/qemu-system-arm.exe" -M help'
 
       - name: Copy exe into workspace
         run: |
