@@ -75,9 +75,15 @@ jobs:
           fi
           echo "Guest survived the 15s smoke test."
 
+      - name: Copy binary into workspace
+        run: |
+          cp "$MIBAND_QEMU_SRC/build/qemu-system-arm" ./qemu-system-arm
+          ls -lh qemu-system-arm
+          file qemu-system-arm || true
+
       - name: Upload qemu-system-arm
         uses: actions/upload-artifact@v4
         with:
           name: qemu-system-arm-linux
-          path: ${{ env.MIBAND_QEMU_SRC }}/build/qemu-system-arm
+          path: qemu-system-arm
           if-no-files-found: error
