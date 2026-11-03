@@ -87,3 +87,69 @@ jobs:
           name: qemu-system-arm-linux
           path: qemu-system-arm
           if-no-files-found: error
+
+  build-windows:
+    name: Native Windows build (MSYS2 UCRT64)
+    runs-on: windows-latest
+    timeout-minutes: 240
+    env:
+      MIBAND_QEMU_SRC: D:\a\bes-qemu-8.2-win
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up MSYS2 UCRT64
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: UCRT64
+          update: false
+          install: >-
+            git
+            python
+            pkgconf
+            meson
+            make
+            mingw-w64-ucrt-x86_64-clang
+            mingw-w64-ucrt-x86_64-gcc
+            mingw-w64-ucrt-x86_64-ninja
+            mingw-w64-ucrt-x86_64-glib2
+            mingw-w64-ucrt-x86_64-pixman
+
+      - name: Cache QEMU checkout (Windows)
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.MIBAND_QEMU_SRC }}
+          key: qemu-checkout-win-f671ce11d2a15a58ab752d7cf0b2890c9022c7ba
+          restore-keys: |
+            qemu-checkout-win-f671ce11d2a15a58ab752d7cf0b2890c9022c7ba
+
+      # Primary: clang. Retry with gcc on failure (clean build dir first,
+      # because build.sh won't re-run configure into an existing build tree).
+      - name: Build (integrate + configure + ninja)
+        shell: msys2 {0}
+        run: |
+          set +e
+          bash build.sh
+          code=$?
+          set -e
+          if [ "$code" -ne 0 ]; then
+            echo "::warning::clang build failed (code $code), retrying with gcc"
+            rm -rf "$MIBAND_QEMU_SRC/build"
+            BES_CC=gcc bash build.sh
+          fi
+
+      - name: Show supported machines
+        shell: msys2 {0}
+        run: "$MIBAND_QEMU_SRC/build/qemu-system-arm.exe" -M help
+
+      - name: Copy exe into workspace
+        run: |
+          Copy-Item "$env:MIBAND_QEMU_SRC\build\qemu-system-arm.exe" .\qemu-system-arm.exe
+          Get-Item .\qemu-system-arm.exe | Select-Object Name, Length
+
+      - name: Upload qemu-system-arm (Windows)
+        uses: actions/upload-artifact@v4
+        with:
+          name: qemu-system-arm-windows
+          path: qemu-system-arm.exe
+          if-no-files-found: error
