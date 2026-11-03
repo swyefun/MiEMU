@@ -30,6 +30,18 @@ case "$(uname -s)" in
     MINGW*|MSYS*) python3 "$script_dir/tools/prepare_windows_build.py" "$qemu_src" ;;
 esac
 
+# MSYS2 / Windows: QEMU 8.2 pins meson==1.2.3 in pythondeps.toml, but its
+# mkvenv hands the wheels dir to the *native* Windows Python's pip as a POSIX
+# path (file:///d/a/...), which fails to resolve. Pre-install the vendored
+# meson wheel with a Windows-native path so mkvenv finds it already satisfied
+# and never touches pip.
+case "$(uname -s)" in
+    MINGW*|MSYS*)
+        meson_whl=$(cygpath -w "$qemu_src/python/wheels/meson-1.2.3-py3-none-any.whl")
+        python3 -m pip install --no-index --break-system-packages "$meson_whl"
+        ;;
+esac
+
 if [[ ! -f "$qemu_src/build/build.ninja" || ! -f "$qemu_src/build/meson-private/build.dat" ]]; then
     (
         cd -- "$qemu_src"
