@@ -1302,7 +1302,7 @@ static bool gpu_draw_path(MiBandGpu *gpu, const uint8_t *data, size_t length)
                           path_control);
             gpu_path_diag_count++;
         }
-        if (gpu->acknowledged < 32) {
+        if (gpu->acknowledged < 4096) {
             qemu_log_mask(LOG_UNIMP,
                           "miband GPU path rejected target=%08x format=%03x "
                           "size=%ux%u stride=%u length=%zu\n",
@@ -1413,7 +1413,7 @@ static bool gpu_draw_path(MiBandGpu *gpu, const uint8_t *data, size_t length)
                           gpu->states[0xa42], gpu->states[0xa43],
                           gpu->states[0xa44], gpu->states[0xa45]);
         }
-        if (gpu->acknowledged < 32) {
+        if (gpu->acknowledged < 4096) {
             qemu_log_mask(LOG_UNIMP,
                           "miband GPU path parse failed target=%08x "
                           "format=%03x control=%08x length=%zu\n",
@@ -1588,7 +1588,7 @@ static bool gpu_blit_index8(MiBandGpu *gpu, const uint8_t *rectangle)
         !gpu_paint_state_supported(gpu, true) ||
         !tw || !th || !sw || !sh ||
         tw > 1024 || th > 1024 || sw > 1024 || sh > 1024) {
-        if (gpu->acknowledged < 32) qemu_log_mask(LOG_UNIMP,
+        if (gpu->acknowledged < 4096) qemu_log_mask(LOG_UNIMP,
                       "miband GPU INDEX8 rejected state: target=%08x "
                       "source=%08x mode=%08x size=%ux%u/%ux%u "
                       "stride=%u/%u\n", gpu->states[0xa10],
@@ -1601,14 +1601,14 @@ static bool gpu_blit_index8(MiBandGpu *gpu, const uint8_t *rectangle)
     source = gpu_psram_ptr(gpu, gpu->states[0xa29],
                            (size_t)source_stride * sh);
     if (!target || !source) {
-        if (gpu->acknowledged < 32) qemu_log_mask(LOG_UNIMP,
+        if (gpu->acknowledged < 4096) qemu_log_mask(LOG_UNIMP,
                       "miband GPU INDEX8 rejected address: target=%08x "
                       "source=%08x\n", gpu->states[0xa11],
                       gpu->states[0xa29]);
         return false;
     }
     if (!gpu_source_content_supported(gpu, source, sw, source_kind)) {
-        if (gpu->acknowledged < 32) {
+        if (gpu->acknowledged < 4096) {
             qemu_log_mask(LOG_UNIMP,
                           "miband GPU rectangle reject gradient: "
                           "format=%08x source=%08x "
@@ -1617,7 +1617,7 @@ static bool gpu_blit_index8(MiBandGpu *gpu, const uint8_t *rectangle)
         }
         return false;
     }
-    if (gpu->acknowledged < 32) {
+    if (gpu->acknowledged < 4096) {
         int sample_x, sample_y;
 
         for (sample_y = 0; sample_y < 8; sample_y++) {
@@ -1638,7 +1638,7 @@ static bool gpu_blit_index8(MiBandGpu *gpu, const uint8_t *rectangle)
     if (gpu_float(gpu->states[0xa1a]) != 1.0f ||
         gpu_float(gpu->states[0xa1e]) != 0.0f ||
         gpu_float(gpu->states[0xa22]) != 0.0f) {
-        if (gpu->acknowledged < 32) qemu_log_mask(LOG_UNIMP,
+        if (gpu->acknowledged < 4096) qemu_log_mask(LOG_UNIMP,
                       "miband GPU INDEX8 rejected matrix: c2=%08x "
                       "x2=%08x y2=%08x\n", gpu->states[0xa1a],
                       gpu->states[0xa1e], gpu->states[0xa22]);
@@ -1662,7 +1662,7 @@ static bool gpu_blit_index8(MiBandGpu *gpu, const uint8_t *rectangle)
                                         src_color, 255);
         }
     }
-    if (gpu->acknowledged < 32) {
+    if (gpu->acknowledged < 4096) {
         qemu_log_mask(LOG_UNIMP,
                       "miband GPU blit target=%08x source=%08x "
                       "format=%08x/%08x source_size=%ux%u rect=%d,%d,%d,%d "
@@ -1714,7 +1714,7 @@ static bool gpu_run_stream(MiBandGpu *gpu, const uint8_t *commands,
             }
             if (units == 1) {
                 if (!gpu_blit_index8(gpu, commands + offset + 8)) {
-                    if (gpu->acknowledged < 32) qemu_log_mask(LOG_UNIMP,
+                    if (gpu->acknowledged < 4096) qemu_log_mask(LOG_UNIMP,
                                   "miband GPU rejected rectangle at "
                                   "command offset %#zx\n", offset);
                     return false;
@@ -1744,7 +1744,7 @@ static bool gpu_run_stream(MiBandGpu *gpu, const uint8_t *commands,
             called = gpu_psram_ptr(gpu, address, bytes);
             if (!gpu_run_stream(gpu, called, bytes, depth + 1, budget,
                                 paths, blits)) {
-                if (gpu->acknowledged < 32) qemu_log_mask(LOG_UNIMP,
+                if (gpu->acknowledged < 4096) qemu_log_mask(LOG_UNIMP,
                               "miband GPU rejected CALL address=%08x "
                               "bytes=%zu depth=%u\n", address, bytes,
                               depth + 1);
@@ -1754,7 +1754,7 @@ static bool gpu_run_stream(MiBandGpu *gpu, const uint8_t *commands,
         } else if (opcode == 7) {
             return depth != 0;
         } else {
-            if (gpu->acknowledged < 32) qemu_log_mask(LOG_UNIMP,
+            if (gpu->acknowledged < 4096) qemu_log_mask(LOG_UNIMP,
                           "miband GPU rejected opcode %u at offset %#zx\n",
                           opcode, offset);
             return false;
@@ -1784,7 +1784,7 @@ static bool gpu_run_command(MiBandGpu *gpu)
     if (!accepted || (gpu->memory_ptr && paths)) {
         return false;
     }
-    if (gpu->acknowledged < 16) {
+    if (gpu->acknowledged < 4096) {
         qemu_log_mask(LOG_UNIMP,
                       "miband GPU INDEX8 subset: %u blits, %u paths skipped, "
                       "target=%08x rendering_complete=%u\n",
@@ -2105,7 +2105,7 @@ bool miband_gpu_write(MiBandGpu *gpu, hwaddr address, unsigned size,
                 }
             }
             if (!rendered_ok) {
-                if (gpu->acknowledged < 32) qemu_log_mask(LOG_UNIMP,
+                if (gpu->acknowledged < 4096) qemu_log_mask(LOG_UNIMP,
                               "miband GPU unsupported command at %08x; "
                               "completion %s (not rendered)\n",
                               gpu->cmd_address,
