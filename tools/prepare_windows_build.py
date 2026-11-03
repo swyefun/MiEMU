@@ -16,6 +16,17 @@ def prepare(root):
     if replacement not in text:
         if text.count(original)!=1:raise ValueError('unrecognized QEMU install tree setup')
         path.write_text(text.replace(original,replacement))
+    # QEMU 8.2 defaults the Windows install prefix to '/qemu' in this machine
+    # file. Ninja's build.ninja regeneration re-applies it *without* the
+    # configure-time -Dprefix, and Python 3.13+ (ntpath.isabs) rejects
+    # '/qemu' as non-absolute. Pin a drive-lettered prefix instead.
+    path=Path(root)/'configs/meson/windows.txt'
+    text=path.read_text()
+    prefix=(Path(root)/'install').resolve().as_posix()
+    updated=text.replace("prefix = '/qemu'","prefix = '%s'"%prefix)
+    if updated!=text:path.write_text(updated)
+    elif "prefix = '%s'"%prefix not in text:
+        raise ValueError('unrecognized QEMU windows.txt prefix default')
     # QEMU 8.2 acknowledges pipe bytes even when the QMP frontend is paused.
     # Keep the byte until chr_accept_input signals that the frontend can take it.
     path=Path(root)/'chardev/char-win-stdio.c'
