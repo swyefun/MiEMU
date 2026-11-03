@@ -841,7 +841,9 @@ static uint32_t gpu_sample_source(MiBandGpu *gpu, const uint8_t *src,
  * In particular 10002102 must not fall through to a solid-colour path. */
 static bool gpu_paint_state_supported(MiBandGpu *gpu, bool rectangle)
 {
-    uint32_t mode = gpu->states[0xa00];
+    /* Bit 28 is not consulted by any pixel-blend math below; firmware builds
+     * differ only in this status bit, so normalize it before whitelisting. */
+    uint32_t mode = gpu->states[0xa00] & ~0x10000000u;
 
     if (gpu->states[0xad1] != 0) {
         return false;
@@ -850,13 +852,16 @@ static bool gpu_paint_state_supported(MiBandGpu *gpu, bool rectangle)
         /* Bit 7 selects the command FIFO workaround, not pixel semantics.
          * NORMAL/MULTIPLY textures use the same pixel blend operations
          * as paths; NONE is used for offscreen filter intermediates. */
-        return mode == 0x10000102 || (mode & ~0x80u) == 0x10001101 ||
-               (mode & ~0x80u) == 0x10001001 ||
-               (mode & ~0x80u) == 0x10002101 ||
+        return mode == 0x10000102 || mode == 0x00000102 ||
+               (mode & ~0x80u) == 0x10001101 || (mode & ~0x80u) == 0x00001101 ||
+               (mode & ~0x80u) == 0x10001001 || (mode & ~0x80u) == 0x00001001 ||
+               (mode & ~0x80u) == 0x10002101 || (mode & ~0x80u) == 0x00002101 ||
                (mode == 0x00002181 && gpu->states[0xa25] == 0x01010102);
     }
-    return mode == 0x10000102 || mode == 0x10000402 ||
-           mode == 0x10001102 || mode == 0x10002102;
+    return mode == 0x10000102 || mode == 0x00000102 ||
+           mode == 0x10000402 || mode == 0x00000402 ||
+           mode == 0x10001102 || mode == 0x00001102 ||
+           mode == 0x10002102 || mode == 0x00002102;
 }
 
 static unsigned gpu_paint_pixel(MiBandGpu *gpu, uint8_t *pixel,
@@ -1551,7 +1556,7 @@ static bool gpu_blit_index8(MiBandGpu *gpu, const uint8_t *rectangle)
     gpu_dump_draw_inputs(gpu, rectangle, 8, true);
     /* Captured reference offscreen chart clear: solid rectangle, not a texture.
      * Source registers still contain the previous draw and must be ignored. */
-    if (gpu->states[0xa00] == 0x10000102) {
+    if ((gpu->states[0xa00] & ~0x10000000u) == 0x10000102) {
         if (!gpu_paint_state_supported(gpu, true) || !tw || !th ||
             tw > 1024 || th > 1024 ||
             !miband_gpu_target_layout(target_format, ts, right, &target_stride)) {
