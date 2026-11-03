@@ -42,10 +42,18 @@ case "$(uname -s)" in
         ;;
 esac
 
+# Windows: QEMU's default install prefix (/qemu) is not absolute for the
+# native Windows meson, which demands a drive-lettered path.
+configure_extra=()
+case "$(uname -s)" in
+    MINGW*|MSYS*) configure_extra=(--prefix="$(cygpath -m "$qemu_src/install")") ;;
+esac
+
 if [[ ! -f "$qemu_src/build/build.ninja" || ! -f "$qemu_src/build/meson-private/build.dat" ]]; then
     (
         cd -- "$qemu_src"
         CC="$bes_cc" ./configure \
+            "${configure_extra[@]}" \
             --target-list=arm-softmmu \
             --disable-docs --disable-tools --disable-user \
             --disable-guest-agent --disable-slirp \
